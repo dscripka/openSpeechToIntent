@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel", "pybind11>=2.5.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openspeechtointent"
+version = "0.1.0"
+description = "A simple, but performant framework for mapping speech directly to categories and intents."
+readme = "README.md"
+authors = [{name = "David Scripka", email = "david.scripka@gmail.com"}]
+license = {file = "LICENSE"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "onnxruntime",
+]
+
+[project.urls]
+Homepage = "https://github.com/dscripka/openspeechtointent"
+
+[tool.setuptools]
+packages = ["openspeechtointent"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+openspeechtointent = ["resources/intents/default_intents.json"]

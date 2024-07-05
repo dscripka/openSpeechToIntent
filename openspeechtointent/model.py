@@ -1,5 +1,6 @@
 # TODO: Add license and disclosures of the source of the original code (mostly torchaudio)
 
+import os
 import numpy as np
 from typing import List, NamedTuple
 import json
@@ -7,8 +8,8 @@ import pickle
 from typing import List, Union
 import onnxruntime as ort
 import wave
-import torch
-import torchaudio
+from openspeechtointent.forced_alignment import forced_align
+
 
 class TokenSpan(NamedTuple):
     token: int
@@ -17,7 +18,7 @@ class TokenSpan(NamedTuple):
     score: float
 
 class CitrinetModel:
-    def __init__(self, model_path: str="resources/models/stt_en_citrinet_256.onnx", ncpu: int=1):
+    def __init__(self, model_path: str=os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"), ncpu: int=1):
         """
         Initialize the Citrinet model, including pre-processing functions.
         Model is obtained from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/nemo/models/stt_en_citrinet_256
@@ -36,17 +37,22 @@ class CitrinetModel:
         self.asr_model = ort.InferenceSession(model_path, sess_options=sess_options)
 
         # Load stft model
-        self.stft = ort.InferenceSession("resources/models/torchlibrosa_stft.onnx", sess_options=sess_options)
+        location = os.path.dirname(os.path.abspath(__file__))
+        self.stft = ort.InferenceSession(os.path.join(location, "resources/models/torchlibrosa_stft.onnx"), sess_options=sess_options)
 
         # Load filterbank
-        self.filterbank = np.load("resources/models/citrinet_spectrogram_filterbank.npy")
+        filterbank_path = os.path.join(location, "resources/models/citrinet_spectrogram_filterbank.npy")
+        self.filterbank = np.load(filterbank_path)
 
         # Load tokenizer and vocab
-        self.tokenizer = pickle.load(open("resources/models/tokenizer.pkl", "rb"))
-        self.vocab = json.load(open("resources/models/citrinet_vocab.json", 'r'))
+        tokenizer_path = os.path.join(location, "resources/models/tokenizer.pkl")
+        self.tokenizer = pickle.load(open(tokenizer_path, "rb"))
+        vocab_path = os.path.join(location, "resources/models/citrinet_vocab.json")
+        self.vocab = json.load(open(vocab_path, 'r'))
 
         # Load intents
-        self.intents = json.load(open("resources/intents/default_intents.json", 'r'))["smart_home_intents"]
+        intents_path = os.path.join(location, "resources/intents/default_intents.json")
+        self.intents = json.load(open(intents_path, 'r'))["smart_home_intents"]
 
     def get_seq_len(self, seq_len: np.ndarray) -> np.ndarray:
         pad_amount = 512 // 2 * 2
@@ -151,13 +157,12 @@ class CitrinetModel:
         # Get forced alignments
         scores, durations = [], []
         for new_id in new_ids:
-            t_labels, t_scores = torchaudio.functional.forced_align(
-                log_probs = torch.from_numpy(logits[None,]),
-                targets = torch.from_numpy(np.array(new_id)[None,]),
-                blank = len(self.vocab)-1
+            t_labels, t_scores = forced_align(
+                logits[None,],
+                np.array(new_id)[None,],
+                len(self.vocab)-1
             )
-
-            t_labels, t_scores = t_labels[0].numpy(), t_scores[0].numpy()
+            t_labels = t_labels.flatten()
 
             # Get the average score and duration of the aligned text
             token_spans = self.merge_tokens(t_labels, t_scores)
