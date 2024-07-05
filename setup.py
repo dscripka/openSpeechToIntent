@@ -1,4 +1,14 @@
 from setuptools import setup, find_packages
+from pybind11.setup_helpers import Pybind11Extension, build_ext
+
+# Add configuration to build Pybind11 extension
+ext_modules = [
+    Pybind11Extension(
+        "openspeechtointent.forced_alignment",
+        ["openspeechtointent/forced_alignment.cpp"],
+        extra_compile_args=["-O3"],
+    )
+]
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -26,10 +36,13 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "numpy",
-        "onnxruntime"
+        "onnxruntime",
+        "pybind11"
     ],
     include_package_data=True,
     package_data={
         "openspeechtointent": ["resources/intents/default_intents.json"]
     },
+    ext_modules=ext_modules,
+    cmdclass={"build_ext": build_ext},
 )
