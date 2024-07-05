@@ -48,12 +48,12 @@ class CitrinetModel:
         # Load intents
         self.intents = json.load(open("resources/intents/default_intents.json", 'r'))["smart_home_intents"]
 
-    def get_seq_len(self, seq_len):
+    def get_seq_len(self, seq_len: np.ndarray) -> np.ndarray:
         pad_amount = 512 // 2 * 2
         seq_len = np.floor_divide((seq_len + pad_amount - 512), 160) + 1
         return seq_len.astype(np.int64)
 
-    def normalize_batch(self, x, seq_len, normalize_type):
+    def normalize_batch(self, x: np.ndarray, seq_len: np.ndarray, normalize_type: str) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
         x_mean = None
         x_std = None
         if normalize_type == "per_feature":
@@ -77,7 +77,7 @@ class CitrinetModel:
 
         return x, x_mean, x_std
 
-    def get_features(self, x, length):
+    def get_features(self, x: np.ndarray, length: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         # get sequence length
         seq_len = self.get_seq_len(length)
 
@@ -144,7 +144,7 @@ class CitrinetModel:
         ]
         return spans
 
-    def get_forced_alignment_score(self, logits, texts, sr = 16000):
+    def get_forced_alignment_score(self, logits: np.ndarray, texts: List[str], sr: int = 16000) -> tuple[List[float], List[float]]:
         # Get tokens for tests
         new_ids = [self.tokenizer.encode(text) for text in texts]
 
@@ -173,7 +173,7 @@ class CitrinetModel:
 
         return scores, durations
 
-    def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000):
+    def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> tuple[np.ndarray, np.ndarray]:
         if isinstance(audio, str):
             sr, wav_dat = scipy.io.wavfile.read(audio)
         else:
@@ -186,7 +186,7 @@ class CitrinetModel:
 
         return all_features, lengths
 
-    def get_logits(self, audio: Union[str, np.ndarray]):
+    def get_logits(self, audio: Union[str, np.ndarray]) -> np.ndarray:
         # Preprocess audio
         all_features, lengths = self.get_audio_features(audio)
 
