@@ -6,7 +6,7 @@ import json
 import pickle
 from typing import List, Union
 import onnxruntime as ort
-import scipy
+import wave
 import torch
 import torchaudio
 
@@ -175,12 +175,15 @@ class CitrinetModel:
 
     def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> tuple[np.ndarray, np.ndarray]:
         if isinstance(audio, str):
-            sr, wav_dat = scipy.io.wavfile.read(audio)
+            with wave.open(audio, 'rb') as wav_file:
+                sr = wav_file.getframerate()
+                n_frames = wav_file.getnframes()
+                wav_dat = np.frombuffer(wav_file.readframes(n_frames), dtype=np.int16)
         else:
             wav_dat = audio
 
         # Convert to float32 from 16-bit PCM
-        wav_dat = (wav_dat/32767).astype(np.float32)
+        wav_dat = (wav_dat.astype(np.float32) / 32767)
         wav_dat = np.pad(wav_dat, (4000, 4000), mode='constant')
         all_features, lengths = self.get_features(wav_dat[None,], np.array([wav_dat.shape[0]]))
 
