@@ -50,10 +50,6 @@ class CitrinetModel:
         vocab_path = os.path.join(location, "resources/models/citrinet_vocab.json")
         self.vocab = json.load(open(vocab_path, 'r'))
 
-        # Load intents
-        intents_path = os.path.join(location, "resources/intents/default_intents.json")
-        self.intents = json.load(open(intents_path, 'r'))["smart_home_intents"]
-
     def get_seq_len(self, seq_len: np.ndarray) -> np.ndarray:
         pad_amount = 512 // 2 * 2
         seq_len = np.floor_divide((seq_len + pad_amount - 512), 160) + 1
