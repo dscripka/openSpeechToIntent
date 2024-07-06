@@ -8,6 +8,7 @@ import pickle
 from typing import List, Union
 import onnxruntime as ort
 import wave
+import difflib
 from openspeechtointent.forced_alignment import forced_align
 
 
@@ -18,13 +19,18 @@ class TokenSpan(NamedTuple):
     score: float
 
 class CitrinetModel:
-    def __init__(self, model_path: str=os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"), ncpu: int=1):
+    def __init__(self,
+                 intents_path: str,
+                 model_path: str=os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"),
+                 ncpu: int=1
+                 ):
         """
         Initialize the Citrinet model, including pre-processing functions.
         Model is obtained from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/nemo/models/stt_en_citrinet_256
         and then converted to the ONNX format using the standard Nvidia NeMo tools.
 
         Args:
+            intents_path (str): Path to the intents JSON file
             model_path (str): Path to the Citrinet model
             ncpu (int): Number of threads to use for inference
         """
@@ -49,6 +55,89 @@ class CitrinetModel:
         self.tokenizer = pickle.load(open(tokenizer_path, "rb"))
         vocab_path = os.path.join(location, "resources/models/citrinet_vocab.json")
         self.vocab = json.load(open(vocab_path, 'r'))
+
+        # Load intents assumings a JSON file with a single layer of keys (intent categories), each containing a list of strings
+        if not os.path.exists(intents_path):
+            raise FileNotFoundError(f"Intents file not found at {intents_path}")
+        self.intents = json.load(open(intents_path, 'r'))
+
+    def build_intent_similarity_matrix(self, intents: List[str]) -> np.ndarray:
+        """Builds a similarity matrix between intents using the longest common subsequence algorithm.
+
+        Args:
+            intents (List[str]): List of intents
+
+        Returns:
+            np.ndarray: Similarity matrix
+        """
+        n = len(intents)
+        matrix = np.ones((n, n), dtype=float)
+        
+        for i in range(n):
+            for j in range(i+1, n):
+                # Calculate similarty using longest common subsequence
+                similarity = difflib.SequenceMatcher(None, intents[i], intents[j]).find_longest_match(
+                    0, len(intents[i]), 0, len(intents[j])
+                ).size/len(intents[i])
+
+                # Fill the matrix symmetrically
+                matrix[i][j] = similarity
+                matrix[j][i] = similarity
+        
+        return matrix
+
+    def match_intents(self,
+                        logits: np.ndarray,
+                        s: np.ndarray,
+                        intents: List[str],
+                        sim_threshold: float = 0.5,
+                        score_threshold: float = -5
+                    ):
+        """
+        Searches the similarity matrix for intents that are similar (by the similarity matrix),
+        and have a score above the threshold. Can reduce the number of calls to the forced alignment models by 30-50% in most cases,
+        which reduces total latency.
+
+        Args:
+            logits (np.ndarray): Logits from the ASR model used for forced alignment
+            s (np.ndarray): Similarity matrix for the intents
+            intents (List[str]): List of intents to search
+            sim_threshold (float): Similarity threshold to group intents. Lower values will group more intents, which increases efficiency
+                                   at the cost of recall. Scores approaching 1 are essentially the same as exhaustive search.
+            score_threshold (float): Score threshold for the forced alignment. Matches with scores below this threshold will be excluded.
+
+        Returns:
+            tuple: intents, scores, durations (respectively) that meet the thresholds
+        """
+        # Sort the rows by sum of similarities
+        sums = np.sum(s, axis=1)
+        sorted_row_indices = np.argsort(sums)
+
+        # Get the score of the intents
+        top_intents = []
+        top_scores = []
+        top_durations = []
+        excluded_indices = []
+        for ndx in sorted_row_indices:
+            # print(ndx, 107 in excluded_indices)
+            if ndx in excluded_indices:
+                continue
+
+            # Get score of the intent
+            score, duration = self.get_forced_alignment_score(logits, [intents[ndx]])
+
+            # If score is above threshold, add to top intents
+            if score[0] >= score_threshold:
+                top_intents.append(intents[ndx])
+                top_scores.append(score[0])
+                top_durations.append(duration[0])
+
+            # Exclude indicies by similarity
+            intent_ndcs = np.where(s[ndx, :] > sim_threshold)[0]
+            excluded_indices.extend(intent_ndcs)
+
+        # print(n_calls, len(intents))
+        return top_intents, top_scores, top_durations
 
     def get_seq_len(self, seq_len: np.ndarray) -> np.ndarray:
         pad_amount = 512 // 2 * 2
@@ -146,7 +235,11 @@ class CitrinetModel:
         ]
         return spans
 
-    def get_forced_alignment_score(self, logits: np.ndarray, texts: List[str], sr: int = 16000) -> tuple[List[float], List[float]]:
+    def get_forced_alignment_score(self,
+                                   logits: np.ndarray,
+                                   texts: List[str],
+                                   sr: int = 16000,
+                                ) -> tuple[List[float], List[float]]:
         # Get tokens for tests
         new_ids = [self.tokenizer.encode(text) for text in texts]
 
