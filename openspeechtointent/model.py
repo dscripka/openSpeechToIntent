@@ -13,6 +13,9 @@ from openspeechtointent.forced_alignment import forced_align
 
 
 class TokenSpan(NamedTuple):
+    """
+    A basic class to represent a token span with a score.
+    """
     token: int
     start: int
     end: int
@@ -140,35 +143,66 @@ class CitrinetModel:
         return top_intents, top_scores, top_durations
 
     def get_seq_len(self, seq_len: np.ndarray) -> np.ndarray:
+        """
+        Get the sequence length for the given input length.
+        Note! This has hard-coded values for the default Citrinet 256 model from Nvidia.
+
+        Args:
+            seq_len (np.ndarray): Input sequence length
+
+        Returns:
+            np.ndarray: Sequence length for the model
+        """
         pad_amount = 512 // 2 * 2
         seq_len = np.floor_divide((seq_len + pad_amount - 512), 160) + 1
         return seq_len.astype(np.int64)
 
     def normalize_batch(self, x: np.ndarray, seq_len: np.ndarray, normalize_type: str) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+        """
+        Normalize the input batch of features.
+
+        Args:
+            x (np.ndarray): Input features
+            seq_len (np.ndarray): Sequence length
+            normalize_type (str): Type of normalization to apply. Options are "per_feature" or "per_batch"
+
+        Returns:
+            tuple: Normalized features, mean, and standard deviation
+        """
         x_mean = None
         x_std = None
-        if normalize_type == "per_feature":
-            batch_size, num_features, max_time = x.shape
+        batch_size, num_features, max_time = x.shape
 
-            time_steps = np.tile(np.arange(max_time)[np.newaxis, :], (batch_size, 1))
-            valid_mask = time_steps < seq_len[:, np.newaxis]
-            
-            x_mean_numerator = np.where(valid_mask[:, np.newaxis, :], x, 0.0).sum(axis=2)
-            x_mean_denominator = valid_mask.sum(axis=1)
-            x_mean = x_mean_numerator / x_mean_denominator[:, np.newaxis]
+        time_steps = np.tile(np.arange(max_time)[np.newaxis, :], (batch_size, 1))
+        valid_mask = time_steps < seq_len[:, np.newaxis]
+        
+        x_mean_numerator = np.where(valid_mask[:, np.newaxis, :], x, 0.0).sum(axis=2)
+        x_mean_denominator = valid_mask.sum(axis=1)
+        x_mean = x_mean_numerator / x_mean_denominator[:, np.newaxis]
 
-            # Subtract 1 in the denominator to correct for the bias.
-            x_std = np.sqrt(
-                np.sum(np.where(valid_mask[:, np.newaxis, :], x - x_mean[:, :, np.newaxis], 0.0) ** 2, axis=2)
-                / (x_mean_denominator[:, np.newaxis] - 1.0)
-            )
-            # make sure x_std is not zero
-            x_std += 1e-5
-            return (x - x_mean[:, :, np.newaxis]) / x_std[:, :, np.newaxis], x_mean, x_std
+        # Subtract 1 in the denominator to correct for the bias.
+        x_std = np.sqrt(
+            np.sum(np.where(valid_mask[:, np.newaxis, :], x - x_mean[:, :, np.newaxis], 0.0) ** 2, axis=2)
+            / (x_mean_denominator[:, np.newaxis] - 1.0)
+        )
+        # make sure x_std is not zero
+        x_std += 1e-5
+        return (x - x_mean[:, :, np.newaxis]) / x_std[:, :, np.newaxis], x_mean, x_std
 
         return x, x_mean, x_std
 
     def get_features(self, x: np.ndarray, length: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Get the melspectrogram audio features for the raw input audio.
+
+        Args:
+            x (np.ndarray): Input audio
+            length (np.ndarray): Length of the audio
+
+        Returns:
+            tuple: Features and sequence length (both as np.ndarrays)
+        
+        """
         # get sequence length
         seq_len = self.get_seq_len(length)
 
@@ -193,7 +227,7 @@ class CitrinetModel:
         x = np.log(x + 5.960464477539063e-08)
 
         # normalize if required
-        x, _, _ = self.normalize_batch(x, seq_len, normalize_type="per_feature")
+        x, _, _ = self.normalize_batch(x, seq_len)
 
         # mask to zero any values beyond seq_len in batch, pad to multiple of `pad_to` (for efficiency)
         max_len = x.shape[-1]
@@ -240,6 +274,17 @@ class CitrinetModel:
                                    texts: List[str],
                                    sr: int = 16000,
                                 ) -> tuple[List[float], List[float]]:
+        """
+        Get the forced alignment score for the given logits and text.
+
+        Args:
+            logits (np.ndarray): Logits from the ASR model
+            texts (List[str]): List of texts to align
+            sr (int): Sample rate of the audio
+
+        Returns:
+            tuple: List of scores and durations for best alignment of the text to the logits
+        """
         # Get tokens for tests
         new_ids = [self.tokenizer.encode(text) for text in texts]
 
@@ -268,6 +313,16 @@ class CitrinetModel:
         return scores, durations
 
     def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Get the audio features for the given audio file or numpy array.
+
+        Args:
+            audio (Union[str, np.ndarray]): Audio file or numpy array of audio
+            sr (int): Sample rate of the audio
+
+        Returns:
+            tuple: Features and sequence length (both as np.ndarrays)
+        """
         if isinstance(audio, str):
             with wave.open(audio, 'rb') as wav_file:
                 sr = wav_file.getframerate()
@@ -284,6 +339,15 @@ class CitrinetModel:
         return all_features, lengths
 
     def get_logits(self, audio: Union[str, np.ndarray]) -> np.ndarray:
+        """
+        Get the logits for the given audio file or numpy array using the Citrinet model.
+
+        Args:
+            audio (Union[str, np.ndarray]): Audio file or numpy array of audio
+
+        Returns:
+            np.ndarray: Logits from the ASR model
+        """
         # Preprocess audio
         all_features, lengths = self.get_audio_features(audio)
 
