@@ -89,7 +89,7 @@ class CitrinetModel:
         
         return matrix
 
-    def match_intents(self,
+    def match_intents_by_similarity(self,
                         logits: np.ndarray,
                         s: np.ndarray,
                         intents: List[str],
@@ -356,3 +356,39 @@ class CitrinetModel:
         logits = logits[0][0]
 
         return logits
+
+    def match_intents(self,
+                      audio: Union[str, np.ndarray],
+                      intents: List[str] = [],
+                      approximate: bool = False,
+                      ) -> tuple[List[str], List[float], List[float]]:
+        """
+        Match the intents for the given audio file or numpy array.
+
+        Args:
+            audio (Union[str, np.ndarray]): Audio file or numpy array of audio
+            intents (List[str]): List of intents to search
+            approximate (bool): If True, will use approximate intent similarities to more efficiently search for matching intents
+
+        Returns:
+            tuple: List of intents, scores, and durations
+        """
+        # Get the logits
+        logits = self.get_logits(audio)
+
+        # Get the intents
+
+        if approximate is True and intents == []:
+            raise ValueError("Approximate matching requires that intents be provided when initializing the model.")
+
+        if approximate is True and intents != []:
+            intents, scores, durations = self.match_intents_by_similarity(logits, self.build_intent_similarity_matrix(intents), intents)
+        elif approximate is False and intents != []:
+            intents, scores, durations = [], [], []
+            for intent in intents:
+                score, duration = self.get_forced_alignment_score(logits, [intent])
+                intents.append(intent)
+                scores.append(score[0])
+                durations.append(duration[0])
+
+        return intents, scores, durations
