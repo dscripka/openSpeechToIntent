@@ -157,7 +157,7 @@ class CitrinetModel:
         seq_len = np.floor_divide((seq_len + pad_amount - 512), 160) + 1
         return seq_len.astype(np.int64)
 
-    def normalize_batch(self, x: np.ndarray, seq_len: np.ndarray, normalize_type: str) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+    def normalize_batch(self, x: np.ndarray, seq_len: np.ndarray) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
         """
         Normalize the input batch of features.
 
