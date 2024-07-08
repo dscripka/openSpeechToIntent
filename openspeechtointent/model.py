@@ -23,7 +23,7 @@ class TokenSpan(NamedTuple):
 
 class CitrinetModel:
     def __init__(self,
-                 intents_path: str,
+                 intents_path: str="",
                  model_path: str=os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"),
                  ncpu: int=1
                  ):
@@ -33,7 +33,7 @@ class CitrinetModel:
         and then converted to the ONNX format using the standard Nvidia NeMo tools.
 
         Args:
-            intents_path (str): Path to the intents JSON file
+            intents_path (str): Path to the intents JSON file (optional)
             model_path (str): Path to the Citrinet model
             ncpu (int): Number of threads to use for inference
         """
@@ -60,9 +60,10 @@ class CitrinetModel:
         self.vocab = json.load(open(vocab_path, 'r'))
 
         # Load intents assumings a JSON file with a single layer of keys (intent categories), each containing a list of strings
-        if not os.path.exists(intents_path):
-            raise FileNotFoundError(f"Intents file not found at {intents_path}")
-        self.intents = json.load(open(intents_path, 'r'))
+        if intents_path != "":
+            if not os.path.exists(intents_path):
+                raise FileNotFoundError(f"Intents file not found at {intents_path}")
+            self.intents = json.load(open(intents_path, 'r'))
 
     def build_intent_similarity_matrix(self, intents: List[str]) -> np.ndarray:
         """Builds a similarity matrix between intents using the longest common subsequence algorithm.
@@ -88,6 +89,42 @@ class CitrinetModel:
                 matrix[j][i] = similarity
         
         return matrix
+
+    def rerank_intents(self,
+                       logits: np.ndarray,
+                       intents: List[str],
+                       scores: List[float],
+                       threshold: float=-5,
+                       method: str="word_score"
+                    ):
+        """Rerank intents using various hueristics, which can improve accuracy in some cases.
+
+        Args:
+            logits (np.ndarray): Logits from the ASR model
+            intents (List[str]): List of intents
+            scores (List[float]): List of scores for the intents
+            score_threshold (float): Score threshold for reranking
+            method (str): Method to use for reranking. Options are "word_score" and "duration"
+
+        Returns:
+            tuple: Reranked intents and scores
+        """
+        if method == "word_score":
+            # Gets all of the words present in the intents and reranks based on the intent with the 
+            # higest overlap in words with forced alignment scores above a threshold
+            words = set(" ".join(intents).split())
+            word_scores = self.get_forced_alignment_score(logits, list(words))[0]
+            words = [w for i, w in enumerate(words) if word_scores[i] > threshold]
+
+            word_overlap = []
+            for i in range(len(intents)):
+                if scores[i] > threshold:
+                    word_overlap.append(len(set(intents[i].split()).intersection(words)))
+            
+            reranked_intents = [intents[i] for i in np.argsort(word_overlap)]
+            reranked_scores = [scores[i] for i in np.argsort(word_overlap)]
+
+            return reranked_intents, reranked_scores
 
     def match_intents_by_similarity(self,
                         logits: np.ndarray,
@@ -291,6 +328,17 @@ class CitrinetModel:
         # Get forced alignments
         scores, durations = [], []
         for new_id in new_ids:
+            # Don't align empty sequences
+            if new_id == []:
+                scores.append(-100)
+                durations.append(0)
+                continue
+
+            # Ensure that tokens are not longer than the time steps in the logits, otherwise truncate
+            if len(new_id) >= logits.shape[0]:
+                new_id = new_id[:logits.shape[0]-1]
+
+            # Calll cpp forced align function
             t_labels, t_scores = forced_align(
                 logits[None,],
                 np.array(new_id)[None,],
@@ -333,7 +381,7 @@ class CitrinetModel:
 
         # Convert to float32 from 16-bit PCM
         wav_dat = (wav_dat.astype(np.float32) / 32767)
-        wav_dat = np.pad(wav_dat, (4000, 4000), mode='constant')
+        wav_dat = np.pad(wav_dat, (4300, 4300), mode='constant')  # forced alignment scores seems sensitive to this pad value? Sometimes get seg faults if it is too small?
         all_features, lengths = self.get_features(wav_dat[None,], np.array([wav_dat.shape[0]]))
 
         return all_features, lengths
