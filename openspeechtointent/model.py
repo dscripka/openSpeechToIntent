@@ -94,8 +94,9 @@ class CitrinetModel:
                        logits: np.ndarray,
                        intents: List[str],
                        scores: List[float],
-                       threshold: float=-5,
-                       method: str="word_score"
+                       method: str="longer_match",
+                       partial_match_penalty: float=0.1,
+                       partial_match_threshold: float=0.1,
                     ):
         """Rerank intents using various hueristics, which can improve accuracy in some cases.
 
@@ -103,28 +104,61 @@ class CitrinetModel:
             logits (np.ndarray): Logits from the ASR model
             intents (List[str]): List of intents
             scores (List[float]): List of scores for the intents
-            score_threshold (float): Score threshold for reranking
-            method (str): Method to use for reranking. Options are "word_score" and "duration"
+            method (str): Method to use for reranking. Options are "longer_match" and "partial_match".
+                          "partial_match" will rerank intents by penalizing intents that are fully contained within other intents.
+                          "longer_match" will rerank intents by preferring longer intents over shorter ones when they have similar scores.
+            partial_intent_penalty (float): Score penalty for intents that are fully contained within other intents when using the 
+                                            "partial_match" method.
 
         Returns:
-            tuple: Reranked intents and scores
+            tuple: Reranked intents and scores (if applicable)
         """
-        if method == "word_score":
-            # Gets all of the words present in the intents and reranks based on the intent with the 
-            # higest overlap in words with forced alignment scores above a threshold
-            words = set(" ".join(intents).split())
-            word_scores = self.get_forced_alignment_score(logits, list(words))[0]
-            words = [w for i, w in enumerate(words) if word_scores[i] > threshold]
 
-            word_overlap = []
-            for i in range(len(intents)):
-                if scores[i] > threshold:
-                    word_overlap.append(len(set(intents[i].split()).intersection(words)))
-            
-            reranked_intents = [intents[i] for i in np.argsort(word_overlap)]
-            reranked_scores = [scores[i] for i in np.argsort(word_overlap)]
+        if method == "longer_match":
+            # Reranking intents that are similar in score by the length of the intent
+            # This prefers longer matches over shorter ones when there are several very similar options
+
+            buckets = []
+            for i, j in zip(intents, scores):
+                if buckets == [] or abs(j - buckets[-1][0][1]) >= 0.10:
+                    buckets.append([(i, j)])
+                else:
+                    buckets[-1].append((i, j))
+
+            # Sort buckets by length of intents
+            reranked_buckets = [sorted(i, key=lambda x: len(x[0]), reverse=True) if len(i) > 1 else i for i in buckets]
+            reranked_intents = [j[0] for i in reranked_buckets for j in i]
+
+            return reranked_intents, []
+
+        if method == "partial_match":
+            # See if any intents are completely contained within other longer intents, and if so prefer longer intents
+            # by penalizing the score of the shorter intents, but only if the score of the unique portion in the
+            # longer intents is above a threshold (that is, is likely also present in the logits)
+            new_scores = [i for i in scores]
+            for ndx, intent in enumerate(intents):
+                if any([intent in j for j in intents if intent != j]):
+                    # Get the unique sequence from the longer intents
+                    unique_sequences = [j.replace(intent, "").strip() for j in intents if intent != j and intent in j]
+                    unique_scores = self.get_forced_alignment_score(logits, unique_sequences + [intent], softmax_scores=True)[1]
+                    contained_intent_score = unique_scores[-1]
+                    if any([abs(i - contained_intent_score) < 0.1*contained_intent_score for i in unique_scores]):
+                        # Penalize the score of the content contained within the other intents
+                        new_scores[ndx] -= partial_match_penalty
+
+            # Reorder the intents by the updated scores
+            reranked_intents = [intents[i] for i in np.argsort(new_scores)[::-1]]
+            reranked_scores = np.sort(new_scores)[::-1].tolist()
 
             return reranked_intents, reranked_scores
+
+        if  method == "partial_match2":
+            # See if any intents are completely contained within other longer intents. If so, find the unique portion
+            # of the larger intent and check the score of that sequence. If the score of that sequence is above a threshold,
+            # (implying that it likely is present in the logits) prefer the longer intent by penalizing the score of the shorter intent.
+
+            new_scores = [i for i in scores]
+
 
     def match_intents_by_similarity(self,
                         logits: np.ndarray,
@@ -134,7 +168,7 @@ class CitrinetModel:
                         score_threshold: float = -5
                     ):
         """
-        Searches the similarity matrix for intents that are similar (by the similarity matrix),
+        Searches the similarity matrix for intents that are similar,
         and have a score above the threshold. Can reduce the number of calls to the forced alignment models by 30-50% in most cases,
         which reduces total latency.
 
@@ -309,18 +343,23 @@ class CitrinetModel:
     def get_forced_alignment_score(self,
                                    logits: np.ndarray,
                                    texts: List[str],
+                                   topk: int = 5,
+                                   softmax_scores: bool = True,
                                    sr: int = 16000,
                                 ) -> tuple[List[float], List[float]]:
         """
-        Get the forced alignment score for the given logits and text.
+        Get the forced alignment score for the given logits and text. Scores are optionally softmaxed to so that the 
+        score across the topk texts sum to 1.
 
         Args:
             logits (np.ndarray): Logits from the ASR model
             texts (List[str]): List of texts to align
+            topk (int): Number of texts highest score intents to return
+            softmax_scores (bool): If True, will apply softmax to the scores
             sr (int): Sample rate of the audio
 
         Returns:
-            tuple: List of scores and durations for best alignment of the text to the logits
+            tuple: List of text, scores, and durations for best alignment of each text to the logits
         """
         # Get tokens for tests
         new_ids = [self.tokenizer.encode(text) for text in texts]
@@ -338,7 +377,7 @@ class CitrinetModel:
             if len(new_id) >= logits.shape[0]:
                 new_id = new_id[:logits.shape[0]-1]
 
-            # Calll cpp forced align function
+            # Call cpp forced align function
             t_labels, t_scores = forced_align(
                 logits[None,],
                 np.array(new_id)[None,],
@@ -346,19 +385,30 @@ class CitrinetModel:
             )
             t_labels = t_labels.flatten()
 
-            # Get the average score and duration of the aligned text
+            # Get the average score of the unmerged sequence of tokens (empirically works better than mean after merging)
+            score = t_scores.mean() 
+
+            # Get the duration of the aligned tokens after merging
             token_spans = self.merge_tokens(t_labels, t_scores)
-
-            score = np.mean([i.score for i in token_spans if i.token != 1024])
-
             non_space_tokens = [i for i in token_spans if i.token != 1024]
             start = non_space_tokens[0].start*1280/sr
-            end = non_space_tokens[-1].start*1280/sr
+            end = non_space_tokens[-1].end*1280/sr
 
             durations.append(end - start)
             scores.append(score)
 
-        return scores, durations
+        # Get topk texts
+        sorted_scores_ndcs = np.array(scores).argsort()[::-1][0:topk]
+        topk_texts = np.array(texts)[sorted_scores_ndcs]
+        topk_scores = np.array(scores)[sorted_scores_ndcs]
+        durations = np.array(durations)[sorted_scores_ndcs]
+
+        # Get topk scores and apply softmax to scores
+        if softmax_scores is True:
+            topk_scores_sm = np.exp(topk_scores)/np.sum(np.exp(topk_scores))
+            return topk_texts, topk_scores_sm, durations
+
+        return topk_texts, topk_scores, durations
 
     def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> tuple[np.ndarray, np.ndarray]:
         """

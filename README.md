@@ -60,19 +60,25 @@ For many use-cases, the performance of openSpeechToIntent can be surprisingly go
 
 Wake word detection frameworks like [openWakeWord](), [microWakeWord](), etc. are designed to efficiently listen for target activation words will continuously processing input audio. The challenge with these types of systems is maintaining high recall of the target activation words, while not activating on other, unrelated audio. In practice, this is a difficult balance that requires careful training and tuning, and performance can vary widely depending on the environment and the specific wakeword.
 
-One approach to improving the effective performance of these types of systems is to tune the wakeword system to be very sensitive, and filter out any false activations through other means. openSpeechToIntent can be used in this way, assuming that there is a known list of intents that would normally be expected after a wake word activation. As an example, the table below shows the performance of the pre-trained `Alexa` wake word model from openWakeWord on the 24 hour [PicoVoice wake word benchmark dataset](), where the model's threshold is set very low (0.1) to ensure high recall but low precision. With this configuration, the false positive rate of ~3.58 is unnacceptably high. However, by using openSpeechToIntent to verify that the speech after the activation matches a list ~400 expected intents (see the list [here]()), this rate can be reduced <0.04 false activations per hour!
+One approach to improving the effective performance of these types of systems is to tune the wakeword system to be very sensitive, and filter out any false activations through other means. openSpeechToIntent can be used in this way, assuming that there is a known list of intents that would normally be expected after a wake word activation. As an example, the table below shows the performance of the pre-trained `Alexa` wake word model from openWakeWord on the 24 hour [PicoVoice wake word benchmark dataset](), where the model's threshold is set very low (0.1) to ensure very high recall but low precision. With this configuration, the false positive rate of ~3.58 is unnacceptably high. However, by using openSpeechToIntent to verify that the speech after the activation matches a list ~400 expected intents (see the list [here]()), this rate can be reduced to ~0.08 false activations per hour!
 
 | openWakeWord Model | openWakeWord Score Threshold | openSpeechToIntent Score Threshold | False Positives per Hour |
 |---------------------|------------------------------|------------------------------------|--------------------------|
 | Alexa              | 0.1                          | NA                                 | ~3.58                     |
-| Alexa              | 0.1                          | -5                                 | ~0.08                     |
+| Alexa              | 0.1                          | 0.1                                 | ~0.08                     |
 
 
 ### Precisely matching a small number of intents
 
-openSpeechToIntent can also be used to perform more fine-grained classification. As an example, on the [Fluent Speech Commands]() test set, an average accuracy of ~98% across 31 intents is possible.
+openSpeechToIntent can also be used to perform more fine-grained classification. As an example, on the [Fluent Speech Commands]() test set, an average accuracy of ~94% across 31 intents is possible. Since most classification failures are across very similar intents, accuracy @k>1 increases performance substantially.
 
-TODO: show breakdown of performance by class
+| Model | Accuracy | Accuracy @ k=2 | Accuracy @ k=3 |
+|-------|----------| --------------| --------------|
+| openSpeechToIntent* | 94.3% | 98% | 99.4% |
+| [SOTA](https://paperswithcode.com/paper/finstreder-simple-and-fast-spoken-language) | 99.7% | -- |
+
+
+**Uses simple [heuristic reranking](https://github.com/dscripka/openSpeechToIntent/blob/openspeechtointent/model.py#L117) to prefer longer intents when similar smaller intents are also possible*
 
 ### Matching a large number of intents
 
