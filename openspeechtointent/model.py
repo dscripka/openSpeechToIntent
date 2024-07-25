@@ -1,4 +1,22 @@
-# TODO: Add license and disclosures of the source of the original code (mostly torchaudio)
+# Copyright 2024 David Scripka. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+##################
+# Several functions and methods in the files were adapted in whole in or part from several other libraries
+# including forced alignment related functions from torchaudio (https://pytorch.org/audio/main/tutorials/ctc_forced_alignment_api_tutorial.html)
+# and the excellent pure cpp implementation of the torch forced alignment code by
+# @MahmoudAshraf97 (https://github.com/MahmoudAshraf97/ctc-forced-aligner/blob/main/ctc_forced_aligner/forced_align_impl.cpp)
 
 import os
 import numpy as np
@@ -152,20 +170,13 @@ class CitrinetModel:
 
             return reranked_intents, reranked_scores
 
-        if  method == "partial_match2":
-            # See if any intents are completely contained within other longer intents. If so, find the unique portion
-            # of the larger intent and check the score of that sequence. If the score of that sequence is above a threshold,
-            # (implying that it likely is present in the logits) prefer the longer intent by penalizing the score of the shorter intent.
-
-            new_scores = [i for i in scores]
-
-
     def match_intents_by_similarity(self,
                         logits: np.ndarray,
                         s: np.ndarray,
                         intents: List[str],
                         sim_threshold: float = 0.5,
-                        score_threshold: float = -5
+                        score_threshold: float = -5,
+                        **kwargs
                     ):
         """
         Searches the similarity matrix for intents that are similar,
@@ -179,6 +190,7 @@ class CitrinetModel:
             sim_threshold (float): Similarity threshold to group intents. Lower values will group more intents, which increases efficiency
                                    at the cost of recall. Scores approaching 1 are essentially the same as exhaustive search.
             score_threshold (float): Score threshold for the forced alignment. Matches with scores below this threshold will be excluded.
+            kwargs: Additional keyword arguments to pass to the `get_forced_alignment_score` function
 
         Returns:
             tuple: intents, scores, durations (respectively) that meet the thresholds
@@ -198,7 +210,7 @@ class CitrinetModel:
                 continue
 
             # Get score of the intent
-            score, duration = self.get_forced_alignment_score(logits, [intents[ndx]])
+            score, duration = self.get_forced_alignment_score(logits, [intents[ndx]], **kwargs)
 
             # If score is above threshold, add to top intents
             if score[0] >= score_threshold:
@@ -386,15 +398,16 @@ class CitrinetModel:
             t_labels = t_labels.flatten()
 
             # Get the average score of the unmerged sequence of tokens (empirically works better than mean after merging)
-            score = t_scores.mean() 
+            score = round(t_scores.mean(), 3) 
 
             # Get the duration of the aligned tokens after merging
             token_spans = self.merge_tokens(t_labels, t_scores)
             non_space_tokens = [i for i in token_spans if i.token != 1024]
             start = non_space_tokens[0].start*1280/sr
             end = non_space_tokens[-1].end*1280/sr
+            duration = round(end - start, 3)
 
-            durations.append(end - start)
+            durations.append(duration)
             scores.append(score)
 
         # Get topk texts
@@ -405,7 +418,7 @@ class CitrinetModel:
 
         # Get topk scores and apply softmax to scores
         if softmax_scores is True:
-            topk_scores_sm = np.exp(topk_scores)/np.sum(np.exp(topk_scores))
+            topk_scores_sm = np.round(np.exp(topk_scores)/np.sum(np.exp(topk_scores)), 4)
             return topk_texts, topk_scores_sm, durations
 
         return topk_texts, topk_scores, durations
@@ -458,7 +471,9 @@ class CitrinetModel:
     def match_intents(self,
                       audio: Union[str, np.ndarray],
                       intents: List[str] = [],
+                      topk: int = 5,
                       approximate: bool = False,
+                      softmax_scores: bool = True,
                       ) -> tuple[List[str], List[float], List[float]]:
         """
         Match the intents for the given audio file or numpy array.
@@ -466,7 +481,10 @@ class CitrinetModel:
         Args:
             audio (Union[str, np.ndarray]): Audio file or numpy array of audio
             intents (List[str]): List of intents to search
+            topk (int): Top k intents to return, by score
             approximate (bool): If True, will use approximate intent similarities to more efficiently search for matching intents
+            softmax_scores (bool): If True, will apply softmax to the scores. This will make the scores in the topk intents sum to 1.
+                                   If false, the scores will be the raw logits values for the forced aligned sequence.
 
         Returns:
             tuple: List of intents, scores, and durations
@@ -482,11 +500,6 @@ class CitrinetModel:
         if approximate is True and intents != []:
             intents, scores, durations = self.match_intents_by_similarity(logits, self.build_intent_similarity_matrix(intents), intents)
         elif approximate is False and intents != []:
-            intents, scores, durations = [], [], []
-            for intent in intents:
-                score, duration = self.get_forced_alignment_score(logits, [intent])
-                intents.append(intent)
-                scores.append(score[0])
-                durations.append(duration[0])
+            top_intents, scores, durations = self.get_forced_alignment_score(logits, intents, topk=topk, softmax_scores=softmax_scores)
 
-        return intents, scores, durations
+        return top_intents, scores, durations
