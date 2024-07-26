@@ -101,7 +101,17 @@ and the number of intents will have the largest impact on the efficiency of the 
 
 ## Advanced Usage
 
-TODO.
+### Limited the search over intents
+
+If the number of intents that you want to match against is very large, this can lead to low efficiency in some devices as it is difficult (currently) to parallelize the search across all intents. However, because in many cases some intents will be very similar (by textual overlap) to other intents, heuristics can be used to limit the search space to only broadly unique intents. openSpeechtoIntent provides on such function that implements this heuristic:
+
+```python
+
+```
+
+### Using raw logit scores
+
+TODO
 
 ## Limitations
 

@@ -2,6 +2,7 @@
     "test_intents": [
         "Set a timer for 30 minutes",
         "Turn off all lights",
+        "turn on the lights",
         "Set thermostat to 72 degrees",
         "Add milk to the shopping list",
         "Remind me to call Mom at 5 PM",
@@ -164,7 +165,6 @@
         "What's the wind chill factor?",
         "Is there a traffic alert on my route?",
         "Resume podcast where I left off",
-        "Adjust TV color temperature",
         "Enable motion detection on all cameras",
         "Unlock the door for the dog walker",
         "Set a recurring alarm for Mondays at 7 AM",
@@ -394,6 +394,11 @@
         "Let's see who's been at the back door",
         "Secure all windows, a storm's coming",
         "Set a timer for six thirty AM",
-        "stop the music"
+        "stop the music",
+        "check the status of refrigerator",
+        "how much coffee is left",
+        "boil water for tea",
+        "clean the floors in the dining room",
+        "let me know when the washer is done"
     ]
 }

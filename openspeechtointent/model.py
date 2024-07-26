@@ -83,6 +83,9 @@ class CitrinetModel:
                 raise FileNotFoundError(f"Intents file not found at {intents_path}")
             self.intents = json.load(open(intents_path, 'r'))
 
+        # Initialize similarity matrix attribute
+        self.similarity_matrix = None
+
     def build_intent_similarity_matrix(self, intents: List[str]) -> np.ndarray:
         """Builds a similarity matrix between intents using the longest common subsequence algorithm.
 
@@ -174,8 +177,8 @@ class CitrinetModel:
                         logits: np.ndarray,
                         s: np.ndarray,
                         intents: List[str],
-                        sim_threshold: float = 0.5,
-                        score_threshold: float = -5,
+                        sim_threshold: float = 0.6,
+                        topk: int = 5,
                         **kwargs
                     ):
         """
@@ -189,7 +192,7 @@ class CitrinetModel:
             intents (List[str]): List of intents to search
             sim_threshold (float): Similarity threshold to group intents. Lower values will group more intents, which increases efficiency
                                    at the cost of recall. Scores approaching 1 are essentially the same as exhaustive search.
-            score_threshold (float): Score threshold for the forced alignment. Matches with scores below this threshold will be excluded.
+            topk (int): Number of top intents to return
             kwargs: Additional keyword arguments to pass to the `get_forced_alignment_score` function
 
         Returns:
@@ -205,25 +208,31 @@ class CitrinetModel:
         top_durations = []
         excluded_indices = []
         for ndx in sorted_row_indices:
-            # print(ndx, 107 in excluded_indices)
             if ndx in excluded_indices:
                 continue
 
             # Get score of the intent
-            score, duration = self.get_forced_alignment_score(logits, [intents[ndx]], **kwargs)
+            _, score, duration = self.get_forced_alignment_score(logits, [intents[ndx]], softmax_scores=False)
 
-            # If score is above threshold, add to top intents
-            if score[0] >= score_threshold:
-                top_intents.append(intents[ndx])
-                top_scores.append(score[0])
-                top_durations.append(duration[0])
+            top_intents.append(intents[ndx])
+            top_scores.append(score[0])
+            top_durations.append(duration[0])
 
-            # Exclude indicies by similarity
+            # Exclude indices by similarity
             intent_ndcs = np.where(s[ndx, :] > sim_threshold)[0]
             excluded_indices.extend(intent_ndcs)
 
-        # print(n_calls, len(intents))
-        return top_intents, top_scores, top_durations
+        # Get the topk results
+        topk_score_ndcs = np.array(top_scores).argsort()[::-1][0:topk]
+        topk_intents = np.array(top_intents)[topk_score_ndcs]
+        topk_scores = np.array(top_scores)[topk_score_ndcs]
+        topk_durations = np.array(top_durations)[topk_score_ndcs]
+
+        # Get topk scores and apply softmax to scores
+        if kwargs.get("softmax_scores") is True:
+            topk_scores = np.round(np.exp(topk_scores)/np.sum(np.exp(topk_scores)), 4)
+
+        return topk_intents, topk_scores, topk_durations
 
     def get_seq_len(self, seq_len: np.ndarray) -> np.ndarray:
         """
@@ -492,13 +501,17 @@ class CitrinetModel:
         # Get the logits
         logits = self.get_logits(audio)
 
-        # Get the intents
-
-        if approximate is True and intents == []:
-            raise ValueError("Approximate matching requires that intents be provided when initializing the model.")
-
+        # Get the best matching intents
         if approximate is True and intents != []:
-            intents, scores, durations = self.match_intents_by_similarity(logits, self.build_intent_similarity_matrix(intents), intents)
+            # Build intent similarity matrix and cache for reuse
+            if self.similarity_matrix is None:
+                self.similarity_matrix = self.build_intent_similarity_matrix(intents)
+
+            top_intents, scores, durations = self.match_intents_by_similarity(
+                logits,
+                self.similarity_matrix, intents, topk=topk, softmax_scores=softmax_scores
+            )
+
         elif approximate is False and intents != []:
             top_intents, scores, durations = self.get_forced_alignment_score(logits, intents, topk=topk, softmax_scores=softmax_scores)
 
