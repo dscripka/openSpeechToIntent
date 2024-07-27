@@ -53,9 +53,9 @@ class CitrinetModel:
         Args:
             intents_path (str): Path to the intents JSON file (optional)
             model_path (str): Path to the Citrinet model
-            ncpu (int): Number of threads to use for inference
+            ncpu (int): Number of threads to use for inference of the Citrinet model
         """
-        # limit to single thread
+        # limit to specified number of threads
         sess_options = ort.SessionOptions()
         sess_options.intra_op_num_threads = ncpu
         sess_options.inter_op_num_threads = ncpu
@@ -360,13 +360,14 @@ class CitrinetModel:
             if (token := tokens[start]) != blank
         ]
         return spans
-
+    
     def get_forced_alignment_score(self,
                                    logits: np.ndarray,
                                    texts: List[str],
                                    topk: int = 5,
                                    softmax_scores: bool = True,
                                    sr: int = 16000,
+                                   ncpu: int = 1,
                                 ) -> tuple[List[float], List[float]]:
         """
         Get the forced alignment score for the given logits and text. Scores are optionally softmaxed to so that the 
@@ -382,22 +383,19 @@ class CitrinetModel:
         Returns:
             tuple: List of text, scores, and durations for best alignment of each text to the logits
         """
-        # Get tokens for tests
-        new_ids = [self.tokenizer.encode(text) for text in texts]
+        # Get tokens for texts
+        new_ids = self.tokenizer.encode(texts)
+
+        # filter out sequences with no tokens
+        texts = [text for text, i in zip(texts, new_ids) if i != []]
+        new_ids = [i for i in new_ids if i != []]
+
+        # Ensure that tokens are not longer than the time steps in the logits, otherwise truncate
+        new_ids = [i if len(i) < logits.shape[0] else i[:logits.shape[0]-1] for i in new_ids]
 
         # Get forced alignments
         scores, durations = [], []
         for new_id in new_ids:
-            # Don't align empty sequences
-            if new_id == []:
-                scores.append(-100)
-                durations.append(0)
-                continue
-
-            # Ensure that tokens are not longer than the time steps in the logits, otherwise truncate
-            if len(new_id) >= logits.shape[0]:
-                new_id = new_id[:logits.shape[0]-1]
-
             # Call cpp forced align function
             t_labels, t_scores = forced_align(
                 logits[None,],
@@ -409,11 +407,10 @@ class CitrinetModel:
             # Get the average score of the unmerged sequence of tokens (empirically works better than mean after merging)
             score = round(t_scores.mean(), 3) 
 
-            # Get the duration of the aligned tokens after merging
-            token_spans = self.merge_tokens(t_labels, t_scores)
-            non_space_tokens = [i for i in token_spans if i.token != 1024]
-            start = non_space_tokens[0].start*1280/sr
-            end = non_space_tokens[-1].end*1280/sr
+            # Get the duration of the aligned tokens (don't merge CTC labels as this is fairly slow, and we only need the total duration)       
+            non_space_tokens = [ndx for ndx, i in enumerate(t_labels) if i != 1024]
+            start = non_space_tokens[0]*1280/sr
+            end = (non_space_tokens[-1] + 1)*1280/sr
             duration = round(end - start, 3)
 
             durations.append(duration)
