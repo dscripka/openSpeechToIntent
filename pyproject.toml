@@ -34,4 +34,8 @@ packages = ["openspeechtointent"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-openspeechtointent = ["resources/intents/default_intents.json"]
+openspeechtointent = [
+    "resources/models/citrinet_spectrogram_filterbank.py",
+    "resources/models/citrinet_tokenizer.pkl",
+    "resources/models/citrinet_vocab.json"
+]
