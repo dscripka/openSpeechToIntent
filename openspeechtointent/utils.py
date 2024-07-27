@@ -28,7 +28,7 @@ def download_file(url, target_directory, file_size=None):
             file_size = int(response.getheader('Content-Length', 0))
         
         # Create a progress bar
-        print(f"Downloading {local_filename} ({file_size} bytes)")
+        print(f"\nDownloading {local_filename} ({file_size} bytes)")
         downloaded = 0
         
         with open(file_path, 'wb') as f:
