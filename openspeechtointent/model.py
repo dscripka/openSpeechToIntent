@@ -41,7 +41,6 @@ class TokenSpan(NamedTuple):
 
 class CitrinetModel:
     def __init__(self,
-                 intents_path: str="",
                  model_path: str=os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"),
                  ncpu: int=1
                  ):
@@ -51,7 +50,6 @@ class CitrinetModel:
         and then converted to the ONNX format using the standard Nvidia NeMo tools.
 
         Args:
-            intents_path (str): Path to the intents JSON file (optional)
             model_path (str): Path to the Citrinet model
             ncpu (int): Number of threads to use for inference of the Citrinet model
         """
@@ -76,12 +74,6 @@ class CitrinetModel:
         self.tokenizer = pickle.load(open(tokenizer_path, "rb"))
         vocab_path = os.path.join(location, "resources/models/citrinet_vocab.json")
         self.vocab = json.load(open(vocab_path, 'r'))
-
-        # Load intents assumings a JSON file with a single layer of keys (intent categories), each containing a list of strings
-        if intents_path != "":
-            if not os.path.exists(intents_path):
-                raise FileNotFoundError(f"Intents file not found at {intents_path}")
-            self.intents = json.load(open(intents_path, 'r'))
 
         # Initialize similarity matrix attribute
         self.similarity_matrix = None
