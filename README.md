@@ -83,9 +83,9 @@ openSpeechToIntent can also be used to perform more fine-grained classification 
 
 ### Efficiency
 
-openSpeechToIntent is designed to be reasonably efficient, and can run on a wide range of hardware included normal desktop CPUs and moderately powerfull SBCs. The table below shows the performance of the default Nvidia Citrinet model on a several different systems, using a 4 second audio clip as input and matching against 400 intents.
+openSpeechToIntent is designed to be reasonably efficient, and can run on a wide range of hardware included normal desktop CPUs and moderately powerfull SBCs. The table below shows the performance of the default Nvidia Citrinet model on a several different systems, using a 3 second audio clip as input and matching against 400 intents.
 
-| CPU | Number of Threads | Time to Process 4s Audio Clip (ms) | Time to Match Against 400 Intents (ms) |
+| CPU | Number of Threads | Time to Process 3s Audio Clip (ms) | Time to Match Against 400 Intents (ms) |
 |-----|-------------------|-------------------------------|---------------------------|
 | Intel Xeon W-2123 | 1 | 103 | 21 |
 | AMD Ryzen 1600 | 1 | 98 | 17 |
