@@ -20,7 +20,7 @@
 
 import os
 import numpy as np
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Tuple
 import json
 import pickle
 from typing import List, Union
@@ -241,7 +241,7 @@ class CitrinetModel:
         seq_len = np.floor_divide((seq_len + pad_amount - 512), 160) + 1
         return seq_len.astype(np.int64)
 
-    def normalize_batch(self, x: np.ndarray, seq_len: np.ndarray) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+    def normalize_batch(self, x: np.ndarray, seq_len: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Normalize the input batch of features.
 
@@ -273,9 +273,7 @@ class CitrinetModel:
         x_std += 1e-5
         return (x - x_mean[:, :, np.newaxis]) / x_std[:, :, np.newaxis], x_mean, x_std
 
-        return x, x_mean, x_std
-
-    def get_features(self, x: np.ndarray, length: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def get_features(self, x: np.ndarray, length: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Get the melspectrogram audio features for the raw input audio.
 
@@ -360,7 +358,7 @@ class CitrinetModel:
                                    softmax_scores: bool = True,
                                    sr: int = 16000,
                                    ncpu: int = 1,
-                                ) -> tuple[List[float], List[float]]:
+                                ) -> Tuple[List[float], List[float]]:
         """
         Get the forced alignment score for the given logits and text. Scores are optionally softmaxed to so that the 
         score across the topk texts sum to 1.
@@ -426,7 +424,7 @@ class CitrinetModel:
 
         return topk_texts, topk_scores, durations
 
-    def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> tuple[np.ndarray, np.ndarray]:
+    def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> Tuple[np.ndarray, np.ndarray]:
         """
         Get the audio features for the given audio file or numpy array.
 
@@ -477,7 +475,7 @@ class CitrinetModel:
                       topk: int = 5,
                       approximate: bool = False,
                       softmax_scores: bool = True,
-                      ) -> tuple[List[str], List[float], List[float]]:
+                      ) -> Tuple[List[str], List[float], List[float]]:
         """
         Match the intents for the given audio file or numpy array.
 

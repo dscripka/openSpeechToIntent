@@ -23,6 +23,7 @@ requires-python = ">=3.8"
 dependencies = [
     "numpy",
     "onnxruntime",
+    "sentencepiece>=0.2.0"
 ]
 
 [project.urls]

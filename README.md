@@ -17,7 +17,7 @@ To install openSpeechToIntent, you can simply use pip:
 pip install openSpeechToIntent
 ```
 
-This should work on nearly all operating systems (Windows, macOS, Linux), as there are only three requirements: `numpy`, `onnxruntime`, and `pybind11`.
+This should work on nearly all operating systems (Windows, macOS, Linux), as there are only four requirements: `numpy`, `onnxruntime`, `pybind11`, and `sentencepiece`.
 
 ## Usage
 
@@ -87,31 +87,24 @@ Use synthetic dataset of 400+ intents (and maybe make it larger?) and show the a
 
 ### Efficiency
 
-openSpeechToIntent is designed to be reasonably efficient, and can run on a wide range of hardware included normal desktop CPUs and moderately powerfull SBCs. The table below shows the performance of the default Nvidia Citrinet model on a several different systems, using a 4 second audio clip as input.
+openSpeechToIntent is designed to be reasonably efficient, and can run on a wide range of hardware included normal desktop CPUs and moderately powerfull SBCs. The table below shows the performance of the default Nvidia Citrinet model on a several different systems, using a 4 second audio clip as input and matching against 400 intents.
 
-| CPU | Number of Threads | Time to Process 4s Audio Clip (ms) | Time to Match Against 100 Intents (ms) |
+| CPU | Number of Threads | Time to Process 4s Audio Clip (ms) | Time to Match Against 400 Intents (ms) |
 |-----|-------------------|-------------------------------|---------------------------|
-| Intel Xeon W-2123 | 1 | 103 | 20 |
-| AMD Ryzen 1600 | 1 | 98 | 27 |
-| Raspberry Pi 4 | 1 | 320 | 110 |
-| Raspberry Pi 4 | 2 | 262 | 110 |
+| Intel Xeon W-2123 | 1 | 103 | 21 |
+| AMD Ryzen 1600 | 1 | 98 | 17 |
+| Raspberry Pi 4 | 1 | 320 | 56 |
+| Raspberry Pi 4 | 2 | 262 | 56 |
 
-Note that further optimizations are possible (see the [Advanced Usage](#advanced-usage) section), and in general the length of the audio clip
-and the number of intents will have the largest impact on the efficiency of the system.
+Note that further optimizations are possible, and in general the length of the audio clip and the number of intents will have the largest impact on the efficiency of the system. By using hueristics to limit the number of intents to match and precisely controlling the length of the audio clip, performance can be further improved.
 
 ## Advanced Usage
 
-### Limited the search over intents
-
-If the number of intents that you want to match against is very large, this can lead to low efficiency in some devices as it is difficult (currently) to parallelize the search across all intents. However, because in many cases some intents will be very similar (by textual overlap) to other intents, heuristics can be used to limit the search space to only broadly unique intents. openSpeechtoIntent provides on such function that implements this heuristic:
-
-```python
-
-```
-
 ### Using raw logit scores
 
-TODO
+In some cases, instead of applying the softmax transform to the scores, it may be useful to use the raw logit scores directly. For example, if you are primarily using openSpeechToIntent to filter out false wake word activations from another system, the raw logit score can make it easer to set a global threshold that works well across all intents.
+
+As an example, suppose you have a set of 5 intents with raw logits scores of `[-6, -7, -8, -9, -10]`. In absolute terms, these scores are quite low, and none of the intents have good alignments with the audio. However, applying softmax to these scores gives `[0.6364, 0.2341, 0.0861, 0.0317, 0.0117]`, which falsely implies that the first intent is a good match. By carefully setting a threshold on the raw logit scores by tuning against your specific use-case and deployment environment, you can often achieve better performance compared to using the softmax scores.
 
 ## Limitations
 
@@ -121,7 +114,7 @@ Currently, the library only supports matching English speech to english intents.
 
 Many thanks to Nvidia for the excellent Citrinet speech-to-text models, as well as many other highly performant speech and audio models.
 
-Also, credit to @MahmoudAshraf97 for the excellent modification of the [torch forced alignment cpp functions](https://github.com/MahmoudAshraf97/ctc-forced-aligner/blob/main/ctc_forced_aligner/forced_align_impl.cpp) to simplify dependencies and enable simple usage with `pybind`.
+Also, credit to @MahmoudAshraf97 for the excellent modification of the [torch forced alignment cpp functions](https://github.com/MahmoudAshraf97/ctc-forced-aligner/blob/main/ctc_forced_aligner/forced_align_impl.cpp) to simplify dependencies and enable easy usage with `pybind`.
 
 ## License
 
