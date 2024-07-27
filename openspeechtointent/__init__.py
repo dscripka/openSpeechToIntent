@@ -18,10 +18,10 @@ import os
 MODELS = {
     "stft": {
         "model_path": os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/torchlibrosa_stft.onnx"),
-        "download_url": "https://github.com/dscripka/openSpeechtoIntent/releases/download/v0.1.0/torchlibrosa_stft.onnx"
+        "download_url": "https://github.com/dscripka/openSpeechtoIntent/releases/download/v0.1.0.alpha/torchlibrosa_stft.onnx"
     },
     "citrinet_256": {
         "model_path": os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"),
-        "download_url": "https://github.com/dscripka/openWakeWord/releases/download/v0.1.0/stt_en_citrinet_256.onnx"
+        "download_url": "https://github.com/dscripka/openSpeechtoIntent/releases/download/v0.1.0.alpha/stt_en_citrinet_256.onnx"
     }
 }

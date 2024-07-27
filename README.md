@@ -71,19 +71,15 @@ One approach to improving the effective performance of these types of systems is
 | Alexa              | 0.1                          | 0.1                                 | <0.04                     |
 
 
-### Precisely matching a small number of intents
+### Precisely matching intents
 
-openSpeechToIntent can also be used to perform more fine-grained classification. As an example, on the [Fluent Speech Commands](https://fluent.ai/fluent-speech-commands-a-dataset-for-spoken-language-understanding-research/) test set, an average accuracy of ~98% across 31 intents is possible.
+openSpeechToIntent can also be used to perform more fine-grained classification across a reasonable number of intents. As an example, on the [Fluent Speech Commands](https://fluent.ai/fluent-speech-commands-a-dataset-for-spoken-language-understanding-research/) test set, an average accuracy of ~98% across 31 intents is possible.
 
 | Model | Accuracy |
 |-------|----------|
 | openSpeechToIntent | 98.2% |
 | [SOTA](https://paperswithcode.com/paper/finstreder-simple-and-fast-spoken-language) | 99.7% |
 
-
-### Matching a large number of intents
-
-Use synthetic dataset of 400+ intents (and maybe make it larger?) and show the accuracy of the model across all intents.
 
 ### Efficiency
 
