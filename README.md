@@ -21,13 +21,13 @@ This should work on nearly all operating systems (Windows, macOS, Linux), as the
 
 ## Usage
 
-openSpeechToIntent is designed to be simple to use. Simply provide a file/array of audio data and a list of target intents, and the library will return information about potential intent matches.
+openSpeechToIntent is designed to be simple to use. Just provide a file/array of audio data and a list of target intents, and the library will return information about potential intent matches.
 
 ```python
 
 from openspeechtointent.model import CitrinetModel
 
-# Load model
+# Load model (this will also download the model if it is not already present)
 mdl = CitrinetModel()
 
 # Define some simple intents

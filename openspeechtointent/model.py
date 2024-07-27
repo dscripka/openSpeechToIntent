@@ -28,7 +28,8 @@ import onnxruntime as ort
 import wave
 import difflib
 from openspeechtointent.forced_alignment import forced_align_single_sequence, forced_align_multiple_sequence
-
+from openspeechtointent.utils import download_file
+from openspeechtointent import MODELS
 
 class TokenSpan(NamedTuple):
     """
@@ -53,6 +54,11 @@ class CitrinetModel:
             model_path (str): Path to the Citrinet model
             ncpu (int): Number of threads to use for inference of the Citrinet model
         """
+        # Download models from github release if the don't already exist
+        for model in MODELS.keys():
+            if not os.path.exists(MODELS[model]["model_path"]):
+                download_file(MODELS[model]["download_url"], os.path.dirname(MODELS[model]["model_path"]))
+        
         # limit to specified number of threads
         sess_options = ort.SessionOptions()
         sess_options.intra_op_num_threads = ncpu
@@ -70,7 +76,7 @@ class CitrinetModel:
         self.filterbank = np.load(filterbank_path)
 
         # Load tokenizer and vocab
-        tokenizer_path = os.path.join(location, "resources/models/tokenizer.pkl")
+        tokenizer_path = os.path.join(location, "resources/models/citrinet_tokenizer.pkl")
         self.tokenizer = pickle.load(open(tokenizer_path, "rb"))
         vocab_path = os.path.join(location, "resources/models/citrinet_vocab.json")
         self.vocab = json.load(open(vocab_path, 'r'))
