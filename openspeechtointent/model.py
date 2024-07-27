@@ -27,7 +27,7 @@ from typing import List, Union
 import onnxruntime as ort
 import wave
 import difflib
-from openspeechtointent.forced_alignment import forced_align
+from openspeechtointent.forced_alignment import forced_align_single_sequence, forced_align_multiple_sequence
 
 
 class TokenSpan(NamedTuple):
@@ -393,19 +393,24 @@ class CitrinetModel:
         # Ensure that tokens are not longer than the time steps in the logits, otherwise truncate
         new_ids = [i if len(i) < logits.shape[0] else i[:logits.shape[0]-1] for i in new_ids]
 
+        # Convert token sequences to numpy arrays with the right shape for forced alignment
+        new_ids = [np.array(i)[None,] for i in new_ids]
+
+        # Get forced alignments for all sequences
+        alignments = forced_align_multiple_sequence(
+            logits[None,],
+            new_ids,
+            len(self.vocab)-1
+        )
+
         # Get forced alignments
         scores, durations = [], []
-        for new_id in new_ids:
-            # Call cpp forced align function
-            t_labels, t_scores = forced_align(
-                logits[None,],
-                np.array(new_id)[None,],
-                len(self.vocab)-1
-            )
-            t_labels = t_labels.flatten()
+        for alignment in alignments:
+            # Get token labels for the sequence
+            t_labels = alignment[0].flatten()
 
             # Get the average score of the unmerged sequence of tokens (empirically works better than mean after merging)
-            score = round(t_scores.mean(), 3) 
+            score = round(alignment[1].mean(), 3) 
 
             # Get the duration of the aligned tokens (don't merge CTC labels as this is fairly slow, and we only need the total duration)       
             non_space_tokens = [ndx for ndx, i in enumerate(t_labels) if i != 1024]
