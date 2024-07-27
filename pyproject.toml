@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openspeechtointent"
-version = "0.1.0"
 description = "A simple, but performant framework for mapping speech directly to categories and intents."
 readme = "README.md"
 authors = [{name = "David Scripka", email = "david.scripka@gmail.com"}]
@@ -28,6 +27,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/dscripka/openspeechtointent"
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "dirty-tag"
 
 [tool.setuptools]
 packages = ["openspeechtointent"]
