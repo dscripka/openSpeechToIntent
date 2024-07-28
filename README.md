@@ -106,6 +106,22 @@ As an example, suppose you have a set of 5 intents with raw logits scores of `[-
 
 Currently, the library only supports matching English speech to english intents. Future work may involve expanding to other languages and supporting other speech-to-text frameworks like [whisper.cpp](https://github.com/ggerganov/whisper.cpp).
 
+## Testing
+
+To run the tests for openSpeechToIntent, clone the repo and install with the test requirements:
+
+```bash
+git clone https://github.com/dscripka/openSpeechToIntent.git
+cd openSpeechToIntent
+pip install -e ./[test]
+```
+
+Then run the tests with pytest:
+
+```bash
+pytest
+```
+
 ## Acknowledgements
 
 Many thanks to Nvidia for the excellent Citrinet speech-to-text models, as well as many other highly performant speech and audio models.
