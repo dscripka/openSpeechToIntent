@@ -2,6 +2,14 @@
 requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel", "pybind11>=2.5.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.pytest.ini_options]
+addopts = "--cov=openspeechtointent --cov-report term-missing --flake8"
+flake8-max-line-length = "140"
+testpaths = [
+    "test",
+    "openspeechtointent"
+]
+
 [project]
 name = "openspeechtointent"
 description = "A simple, but performant framework for mapping speech directly to categories and intents."
@@ -25,6 +33,15 @@ dependencies = [
     "sentencepiece>=0.2.0"
 ]
 dynamic = ["version"]
+
+[project.optional-dependencies]
+test = [
+    'pytest',
+    'pytest-cov',
+    'pytest-flake8',
+    'flake8',
+    'pytest-mypy'
+]
 
 [project.urls]
 Homepage = "https://github.com/dscripka/openspeechtointent"

@@ -17,6 +17,7 @@ import os
 import urllib.request
 import sys
 
+
 def download_file(url, target_directory, file_size=None):
     """A simple function to download a file from a URL with a progress bar using only standard libraries."""
     local_filename = url.split('/')[-1]
@@ -26,11 +27,11 @@ def download_file(url, target_directory, file_size=None):
     with urllib.request.urlopen(url) as response:
         if file_size is None:
             file_size = int(response.getheader('Content-Length', 0))
-        
+
         # Create a progress bar
         print(f"\nDownloading {local_filename} ({file_size} bytes)")
         downloaded = 0
-        
+
         with open(file_path, 'wb') as f:
             while True:
                 chunk = response.read(8192)
@@ -38,7 +39,7 @@ def download_file(url, target_directory, file_size=None):
                     break
                 f.write(chunk)
                 downloaded += len(chunk)
-                
+
                 # Update progress
                 progress = downloaded / file_size * 100 if file_size else 0
                 sys.stdout.write(f"\rProgress: {progress:.2f}%")

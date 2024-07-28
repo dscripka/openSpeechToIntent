@@ -14,22 +14,23 @@
 #
 ##################
 # Several functions and methods in the files were adapted in whole in or part from several other libraries
-# including forced alignment related functions from torchaudio (https://pytorch.org/audio/main/tutorials/ctc_forced_alignment_api_tutorial.html)
+# including forced alignment related functions from torchaudio
+# (https://pytorch.org/audio/main/tutorials/ctc_forced_alignment_api_tutorial.html)
 # and the excellent pure cpp implementation of the torch forced alignment code by
 # @MahmoudAshraf97 (https://github.com/MahmoudAshraf97/ctc-forced-aligner/blob/main/ctc_forced_aligner/forced_align_impl.cpp)
 
 import os
 import numpy as np
-from typing import List, NamedTuple, Tuple
+from typing import List, NamedTuple, Tuple, Union
 import json
 import pickle
-from typing import List, Union
 import onnxruntime as ort
 import wave
 import difflib
-from openspeechtointent.forced_alignment import forced_align_single_sequence, forced_align_multiple_sequence
+from openspeechtointent.forced_alignment import forced_align_multiple_sequence
 from openspeechtointent.utils import download_file
 from openspeechtointent import MODELS
+
 
 class TokenSpan(NamedTuple):
     """
@@ -40,10 +41,11 @@ class TokenSpan(NamedTuple):
     end: int
     score: float
 
+
 class CitrinetModel:
     def __init__(self,
-                 model_path: str=os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"),
-                 ncpu: int=1
+                 model_path: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/models/stt_en_citrinet_256.onnx"),
+                 ncpu: int = 1
                  ):
         """
         Initialize the Citrinet model, including pre-processing functions.
@@ -58,7 +60,7 @@ class CitrinetModel:
         for model in MODELS.keys():
             if not os.path.exists(MODELS[model]["model_path"]):
                 download_file(MODELS[model]["download_url"], os.path.dirname(MODELS[model]["model_path"]))
-        
+
         # limit to specified number of threads
         sess_options = ort.SessionOptions()
         sess_options.intra_op_num_threads = ncpu
@@ -95,7 +97,7 @@ class CitrinetModel:
         """
         n = len(intents)
         matrix = np.ones((n, n), dtype=float)
-        
+
         for i in range(n):
             for j in range(i+1, n):
                 # Calculate similarty using longest common subsequence
@@ -106,17 +108,16 @@ class CitrinetModel:
                 # Fill the matrix symmetrically
                 matrix[i][j] = similarity
                 matrix[j][i] = similarity
-        
+
         return matrix
 
     def rerank_intents(self,
                        logits: np.ndarray,
                        intents: List[str],
                        scores: List[float],
-                       method: str="longer_match",
-                       partial_match_penalty: float=0.1,
-                       partial_match_threshold: float=0.1,
-                    ):
+                       method: str = "longer_match",
+                       partial_match_penalty: float = 0.1
+                       ) -> Tuple[List[str], List[float]]:
         """Rerank intents using various hueristics, which can improve accuracy in some cases.
 
         Args:
@@ -126,7 +127,7 @@ class CitrinetModel:
             method (str): Method to use for reranking. Options are "longer_match" and "partial_match".
                           "partial_match" will rerank intents by penalizing intents that are fully contained within other intents.
                           "longer_match" will rerank intents by preferring longer intents over shorter ones when they have similar scores.
-            partial_intent_penalty (float): Score penalty for intents that are fully contained within other intents when using the 
+            partial_intent_penalty (float): Score penalty for intents that are fully contained within other intents when using the
                                             "partial_match" method.
 
         Returns:
@@ -172,13 +173,13 @@ class CitrinetModel:
             return reranked_intents, reranked_scores
 
     def match_intents_by_similarity(self,
-                        logits: np.ndarray,
-                        s: np.ndarray,
-                        intents: List[str],
-                        sim_threshold: float = 0.6,
-                        topk: int = 5,
-                        **kwargs
-                    ):
+                                    logits: np.ndarray,
+                                    s: np.ndarray,
+                                    intents: List[str],
+                                    sim_threshold: float = 0.6,
+                                    topk: int = 5,
+                                    **kwargs
+                                    ):
         """
         Searches the similarity matrix for intents that are similar,
         and have a score above the threshold. Can reduce the number of calls to the forced alignment models by 30-50% in most cases,
@@ -261,11 +262,11 @@ class CitrinetModel:
         """
         x_mean = None
         x_std = None
-        batch_size, num_features, max_time = x.shape
+        batch_size, _, max_time = x.shape
 
         time_steps = np.tile(np.arange(max_time)[np.newaxis, :], (batch_size, 1))
         valid_mask = time_steps < seq_len[:, np.newaxis]
-        
+
         x_mean_numerator = np.where(valid_mask[:, np.newaxis, :], x, 0.0).sum(axis=2)
         x_mean_denominator = valid_mask.sum(axis=1)
         x_mean = x_mean_numerator / x_mean_denominator[:, np.newaxis]
@@ -289,7 +290,7 @@ class CitrinetModel:
 
         Returns:
             tuple: Features and sequence length (both as np.ndarrays)
-        
+
         """
         # get sequence length
         seq_len = self.get_seq_len(length)
@@ -299,7 +300,10 @@ class CitrinetModel:
         x = np.concatenate((x[:, 0:1], x[:, 1:] - preemph * x[:, :-1]), axis=1)
 
         # do stft
-        x = np.vstack(self.stft.run([self.stft.get_outputs()[0].name, self.stft.get_outputs()[1].name], {self.stft.get_inputs()[0].name: x}))
+        x = np.vstack(self.stft.run(
+            [self.stft.get_outputs()[0].name, self.stft.get_outputs()[1].name],
+            {self.stft.get_inputs()[0].name: x})
+        )
 
         # convert to magnitude
         guard = 0
@@ -310,7 +314,7 @@ class CitrinetModel:
 
         # dot with filterbank energies
         x = np.matmul(self.filterbank, x)
-        
+
         # log features if required
         x = np.log(x + 5.960464477539063e-08)
 
@@ -321,7 +325,7 @@ class CitrinetModel:
         max_len = x.shape[-1]
         mask = np.arange(max_len).reshape(1, -1) >= seq_len.reshape(-1, 1)
         x = np.where(mask[:, np.newaxis, :], 0, x)
-        
+
         pad_to = 16
         pad_amt = x.shape[-1] % pad_to
         if pad_amt != 0:
@@ -356,17 +360,16 @@ class CitrinetModel:
             if (token := tokens[start]) != blank
         ]
         return spans
-    
+
     def get_forced_alignment_score(self,
                                    logits: np.ndarray,
                                    texts: List[str],
                                    topk: int = 5,
                                    softmax_scores: bool = True,
-                                   sr: int = 16000,
-                                   ncpu: int = 1,
-                                ) -> Tuple[List[float], List[float]]:
+                                   sr: int = 16000
+                                   ) -> Tuple[List[float], List[float]]:
         """
-        Get the forced alignment score for the given logits and text. Scores are optionally softmaxed to so that the 
+        Get the forced alignment score for the given logits and text. Scores are optionally softmaxed to so that the
         score across the topk texts sum to 1.
 
         Args:
@@ -390,11 +393,11 @@ class CitrinetModel:
         new_ids = [i if len(i) < logits.shape[0] else i[:logits.shape[0]-1] for i in new_ids]
 
         # Convert token sequences to numpy arrays with the right shape for forced alignment
-        new_ids = [np.array(i)[None,] for i in new_ids]
+        new_ids = [np.array(i)[None, ] for i in new_ids]
 
         # Get forced alignments for all sequences
         alignments = forced_align_multiple_sequence(
-            logits[None,],
+            logits[None, ],
             new_ids,
             len(self.vocab)-1
         )
@@ -406,9 +409,10 @@ class CitrinetModel:
             t_labels = alignment[0].flatten()
 
             # Get the average score of the unmerged sequence of tokens (empirically works better than mean after merging)
-            score = round(alignment[1].mean(), 3) 
+            score = round(alignment[1].mean(), 3)
 
-            # Get the duration of the aligned tokens (don't merge CTC labels as this is fairly slow, and we only need the total duration)       
+            # Get the duration of the aligned tokens (don't merge CTC labels as this is slow
+            # and we only need the total duration)
             non_space_tokens = [ndx for ndx, i in enumerate(t_labels) if i != 1024]
             start = non_space_tokens[0]*1280/sr
             end = (non_space_tokens[-1] + 1)*1280/sr
@@ -430,20 +434,18 @@ class CitrinetModel:
 
         return topk_texts, topk_scores, durations
 
-    def get_audio_features(self, audio: Union[str, np.ndarray], sr: int = 16000) -> Tuple[np.ndarray, np.ndarray]:
+    def get_audio_features(self, audio: Union[str, np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Get the audio features for the given audio file or numpy array.
+        Get the audio features for the given audio file or numpy array. Must contain 16-bit 16 khz PCM audio.
 
         Args:
             audio (Union[str, np.ndarray]): Audio file or numpy array of audio
-            sr (int): Sample rate of the audio
 
         Returns:
             tuple: Features and sequence length (both as np.ndarrays)
         """
         if isinstance(audio, str):
             with wave.open(audio, 'rb') as wav_file:
-                sr = wav_file.getframerate()
                 n_frames = wav_file.getnframes()
                 wav_dat = np.frombuffer(wav_file.readframes(n_frames), dtype=np.int16)
         else:
@@ -451,8 +453,9 @@ class CitrinetModel:
 
         # Convert to float32 from 16-bit PCM
         wav_dat = (wav_dat.astype(np.float32) / 32767)
-        wav_dat = np.pad(wav_dat, (4300, 4300), mode='constant')  # forced alignment scores seems sensitive to this pad value? Sometimes get seg faults if it is too small?
-        all_features, lengths = self.get_features(wav_dat[None,], np.array([wav_dat.shape[0]]))
+        # forced alignment scores seems sensitive to this pad value? Sometimes get seg faults if it is too small?
+        wav_dat = np.pad(wav_dat, (4300, 4300), mode='constant')
+        all_features, lengths = self.get_features(wav_dat[None, ], np.array([wav_dat.shape[0]]))
 
         return all_features, lengths
 
