@@ -357,7 +357,7 @@ class CitrinetModel:
 
         # Get the spans, and calculate times (adjusting for padding) and scores
         spans = [
-            TokenSpan(token=self.vocab[token], start=max(0, (start*1280-4300)/sr), end=(end*1280)/sr, score=np.mean(scores[start:end]))
+            TokenSpan(token=self.vocab[token], start=max(0, (start*1280-4300)/sr), end=max(0, (end*1280-4300)/sr), score=np.mean(scores[start:end]))
             for start, end in zip(changes_wo_blank[:-1], changes_wo_blank[1:])
             if (token := tokens[start]) != blank
         ]
