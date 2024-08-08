@@ -333,7 +333,7 @@ class CitrinetModel:
 
         return x, seq_len
 
-    def merge_tokens(self, tokens: np.ndarray, scores: np.ndarray, blank: int = 0) -> List[TokenSpan]:
+    def merge_tokens(self, tokens: np.ndarray, scores: np.ndarray, blank: int = 0, sr=16000) -> List[TokenSpan]:
         """Removes repeated tokens and blank tokens from the given CTC token sequence.
 
         Args:
@@ -354,11 +354,52 @@ class CitrinetModel:
         diff = np.diff(np.concatenate(([-1], tokens, [-1])))
         changes_wo_blank = np.nonzero(diff != 0)[0]
         tokens = tokens.tolist()
+
+        # Get the spans, and calculate times (adjusting for padding) and scores
         spans = [
-            TokenSpan(token=token, start=start, end=end, score=np.mean(scores[start:end]))
+            TokenSpan(token=self.vocab[token], start=max(0, (start*1280-4300)/sr), end=(end*1280)/sr, score=np.mean(scores[start:end]))
             for start, end in zip(changes_wo_blank[:-1], changes_wo_blank[1:])
             if (token := tokens[start]) != blank
         ]
+        return spans
+
+    def get_detailed_alignment(self, logits: np.ndarray, texts: List[str]) -> List[TokenSpan]:
+        """Get detailed alignment of the texts to the logits, with all timing information.
+
+        Args:
+            logits (np.ndarray): Logits from the ASR model
+            texts (List[str]): List of texts to align
+
+        Returns:
+            list of TokenSpan objects
+        """
+        # Get tokens for texts
+        new_ids = self.tokenizer.encode(texts)
+
+        # filter out sequences with no tokens
+        texts = [text for text, i in zip(texts, new_ids) if i != []]
+        new_ids = [i for i in new_ids if i != []]
+
+        # Ensure that tokens are not longer than the time steps in the logits, otherwise truncate
+        new_ids = [i if len(i) < logits.shape[0] else i[:logits.shape[0]-1] for i in new_ids]
+
+        # Convert token sequences to numpy arrays with the right shape for forced alignment
+        new_ids = [np.array(i)[None, ] for i in new_ids]
+
+        # Get forced alignments for all sequences
+        alignment = forced_align_multiple_sequence(
+            logits[None, ],
+            new_ids,
+            len(self.vocab)-1
+        )
+
+        # Get token labels for the sequence
+        t_labels = alignment[0][0].flatten()
+        t_scores = alignment[0][1].flatten()
+
+        # Merge the tokens
+        spans = self.merge_tokens(t_labels, t_scores)
+
         return spans
 
     def get_forced_alignment_score(self,
@@ -450,6 +491,10 @@ class CitrinetModel:
                 wav_dat = np.frombuffer(wav_file.readframes(n_frames), dtype=np.int16)
         else:
             wav_dat = audio
+
+        # Check the data type
+        if wav_dat.dtype != np.int16 or np.abs(wav_dat.max()) < 1.1:
+            raise ValueError("Audio data must be 16-bit PCM!")
 
         # Convert to float32 from 16-bit PCM
         wav_dat = (wav_dat.astype(np.float32) / 32767)
